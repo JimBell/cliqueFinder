@@ -167,6 +167,9 @@ def getMaxSat(G):
             
 
 if __name__ == "__main__":
+    if (len(sys.argv) < 2):
+        printUsage();
+        exit()
     try:
         opts, args = getopt.getopt(sys.argv[2:], "mk:n:", [])
     except getopt.GetoptError as err:
