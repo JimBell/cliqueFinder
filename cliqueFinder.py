@@ -7,6 +7,15 @@ from igraph import *
 import numpy as np
 import time
 
+
+def printUsage():
+    print("USAGE: %s <graph.csv file> -m" % sys.argv[0])
+    print("Options:")
+    print("-m get max-cliques")
+    print("-k get k-cliques")
+    print("-n limit output to n number of cliques")
+
+
 def generateSatFormula_old(G,k):
     V = [x for x in G.keys()]
     VSymb = [Symbol(x) for x in V]
@@ -44,38 +53,33 @@ def generateSatFormula(G,k):
     sat = And(And(domains),And(edgeConstraints))
     return sat
 
+def generateSatFormulaRange(G,kMin,kMax):
+    domains = []
+    edgeConstraints = []
+    V = [x for x in G.keys()]
+    symb = [Symbol(v + "_int", INT) for v in V]
+    domains.append(GE(Plus(symb),Int(kMin)))
+    domains.append(LE(Plus(symb),Int(kMax)))
+    for v in V:
+        domains.append(LE(Symbol(v + "_int", INT),Int(1)))
+        domains.append(GE(Symbol(v + "_int", INT),Int(0)))
+        edgeConstraints.append(Or(Equals(Symbol(v + "_int", INT),Int(0)), Symbol(v)))
+        edgeConstraints.append(Or(Equals(Symbol(v + "_int", INT),Int(1)), Not(Symbol(v))))
+    for i in range(0,len(V)):
+        v1 = V[i]
+        for j in range(i+1,len(V)):
+            v2 = V[j]
+            if not(G[v1][v2]):
+                f = Or(Not(Symbol(v1)),Not(Symbol(v2)))
+                edgeConstraints.append(f)
+    sat = And(And(domains),And(edgeConstraints))
+    return sat
+
+
 def negateSolutionInFormula(sat,solution):
     negSolution = Or([Not(Symbol(x)) for x in solution])
     newSat = And(sat,negSolution)
     return newSat
-
-def getMaxSat(G,kMin=3):
-    k = kMin
-    V = [x for x in G.keys()]
-    sat = generateSatFormula(G,k)
-    oldSat = sat
-    while True:
-        model = get_model(sat)
-        if model == None:
-            sat = oldSat
-            k -= 1
-            break
-        else:
-            k += 1
-            oldSat = sat
-            sat = generateSatFormula(G,k)
-    return sat,k
-
-def getSolution(G,sat):
-    solution = []
-    V = [x for x in G.keys()]
-    model = get_model(sat)
-    if model == None:
-        return model
-    for var,result in list(model):
-        if G[str(var)] and str(result) == "True":
-            solution.append(str(var))
-    return solution
 
 def getAllSolutions(G,sat,maxSolutions=float("inf")):
     solutions = []
@@ -96,6 +100,8 @@ def loadGraph(inputFile):
     f = open(inputFile,"r")
     for line in f.readlines():
         v1,v2 = line.rstrip().split(",");
+        v1 = "v_" + v1
+        v2 = "v_" + v2
         G[str(v1)][str(v2)] = 1;
         G[str(v2)][str(v1)] = 1;
     f.close()
@@ -118,8 +124,47 @@ def getRandomGraph(graphSize,prob=0.1):
                 G["x" + str(j)]["x" + str(i)] = 1;            
     return G
 
+def getSolution(G,sat):
+    solution = []
+    modelResults = {}
+    V = [x for x in G.keys()]
+    model = get_model(sat)
+    if model == None:
+        return None
+    for k in V:
+        if str(model[Symbol(k)]) == "True":
+            solution.append(k)
+    return solution
 
-    
+def getMaxSat(G):
+    kMin = 2
+    kMax = len(G.keys())
+    #print("trying %d ... %d" % (kMin,kMax))
+    sat = generateSatFormulaRange(G,kMin,kMax)
+    solution = getSolution(G,sat)
+    if solution == None:
+        return 0, None
+    else:
+        kMin = len(solution)
+        #print kMin
+    #print solution
+    while kMin != kMax:
+        m = kMin + (kMax - kMin) / 2 + 1
+        #print("kMin=%d..kMax=%d (m=%d)\n" % (kMin,kMax,m))
+        if m <= kMax:
+            #print("trying %d ... %d" % (m,kMax))
+            sat = generateSatFormulaRange(G,m,kMax)
+            solution = getSolution(G,sat)
+            if solution == None:
+                #print "None"
+                kMax = m - 1
+            else:
+                kMin = len(solution)
+    sat = generateSatFormula(G,kMin)
+    solution = getSolution(G,sat)
+    return kMin,solution
+
+            
 
 if __name__ == "__main__":
     try:
@@ -133,14 +178,17 @@ if __name__ == "__main__":
 
     G = loadGraph(sys.argv[1])
     if "-m" in optArgs and "-k" in optArgs:
-        print "-m and -k options cannot be used toghether"
+        print "-m and -k options cannot be used toghether\n"
+        printUsage()
         exit(1)
     elif "-m" in optArgs:
-        sat,k = getMaxSat(G)
+        k, sat = getMaxSat(G)
         if "-n" in optArgs:
+            sat = generateSatFormula(G,k=k)
             solutions = getAllSolutions(G,sat,maxSolutions=int(optArgs["-n"]))
             print solutions
         else:
+            sat = generateSatFormula(G,k=k)
             solutions = getAllSolutions(G,sat)
             print solutions
     elif "-k" in optArgs:
@@ -151,5 +199,8 @@ if __name__ == "__main__":
         else:
             solutions = getAllSolutions(G,sat)
             print solutions
+    elif len(optArgs) == 0:
+        printUsage()
+        exit();
         
 
