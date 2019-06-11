@@ -167,7 +167,7 @@ def getMaxSat(G):
             
 
 if __name__ == "__main__":
-    if (len(sys.argv) < 2):
+    if (len(sys.argv) < 3):
         printUsage();
         exit()
     try:
@@ -205,5 +205,7 @@ if __name__ == "__main__":
     elif len(optArgs) == 0:
         printUsage()
         exit();
+    else:
+        printUsage()
         
 
